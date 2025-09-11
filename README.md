@@ -1,5 +1,38 @@
-# CertifiCat
-Create self-signed code-signing certificates on Windows. Generate PFX, export CER, optionally install to Trusted Root (CurrentUser), and sign EXE(s) with timestamp — all from a tiny Tk GUI. Includes signtool auto-discovery, log view, and a built-in Help/About.
+# CertifiCat 🐱
+**Triple-Year Trust, Single Click.**  
+Create a self-signed code-signing certificate (PFX), export the public CER, optionally install it into **Trusted Root (CurrentUser)**, and sign one or many `.exe` files with a timestamp — all from a tiny Windows GUI.
+
+
+---
+
+## ✨ Features
+- **Self-signed PFX in one click** (RSA-3072, exportable key, 3-year validity)
+- **Export .cer** (public certificate) to share/trust on other machines
+- **Install to Trusted Root (CurrentUser)** — no admin required
+- **Sign EXE(s)** with SHA-256 digest and **RFC-3161 timestamp**
+- **signtool.exe auto-discovery** (local file → `tools\` → Windows SDK → PATH)
+- **Batch signing** + log output + optional auto-verify (via `signtool verify`)
+- **Compact UI** with toggleable log and .cer tools
+- **Help** (F1) and **About** built in; optional **splash** and app icon via base64
+
+> ⚠️ Self-signed certificates are useful for internal/testing use. Other PCs must install your `.cer` to trust the signature. Windows SmartScreen reputation is separate and usually requires a CA-issued cert plus reputation.
+
+---
+
+## 🧰 Requirements
+- **Windows 10/11**
+- **Python 3.9+** (Tkinter included in the standard Windows installer)
+- **PowerShell 5+ or 7+** (the app prefers `pwsh` if available)
+- **signtool.exe** (from Windows 10/11 SDK or Visual Studio Build Tools)  
+  *Optional:* place `signtool.exe` next to the app or in a `tools\` folder.
+
+---
+
+## 🚀 Quick Start
+1. **Clone**:
+   ```bash
+   git clone https://github.com/<you>/CertifiCat.git
+   cd CertifiCat
 
 
 🛡️ Security Notes
