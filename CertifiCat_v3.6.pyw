@@ -8,11 +8,11 @@ CertifiCat — Self-signed πιστοποιητικά υπογραφής κώδ�
 και μόνο αν το ζητήσει (κρυπτογραφημένο με τον λογαριασμό του στα Windows).
 
 Χρήση από γραμμή εντολών / «Αποστολή προς»:
-    CertifiCat_v3.5.pyw  αρχείο1.exe  φάκελος/       → ανοίγει με τα αρχεία στη λίστα
-    CertifiCat_v3.5.pyw  --sign  αρχείο1.exe ...     → τα υπογράφει αμέσως (με το τελευταίο πιστοποιητικό)
+    CertifiCat_v3.6.pyw  αρχείο1.exe  φάκελος/       → ανοίγει με τα αρχεία στη λίστα
+    CertifiCat_v3.6.pyw  --sign  αρχείο1.exe ...     → τα υπογράφει αμέσως (με το τελευταίο πιστοποιητικό)
 """
 APP_NAME = "CertifiCat"
-APP_VERSION = "3.5.0"
+APP_VERSION = "3.6.0"
 APP_AUTHOR = "ALU DEV TEAM"
 
 # ---- Στοιχεία δημιουργού (εμφανίζονται στο «Σχετικά») ----
@@ -2146,9 +2146,12 @@ class CertPage(QWidget):
         fr = QHBoxLayout()
         self.b_folder = btn("📂 Φάκελος", self.open_folder, "secondary", "Άνοιγμα του φακέλου του .pfx")
         self.b_close = btn("✖ Κλείσιμο", self.close_cert, "secondary", "Κλείσιμο πιστοποιητικού (και διαγραφή αποθηκευμένου κωδικού)")
-        fr.addWidget(self.b_folder); fr.addWidget(self.b_close); fr.addStretch()
+        self.b_gh = btn("🐙 GitHub", lambda: open_github_export(self.m, self.m.pfx, self.m.pw,
+                                                              (self.m.info or {}).get("cn", "")), "secondary",
+                        "Το .pfx σε Base64 για GitHub Actions Secrets (αυτόματη υπογραφή στο build)")
+        fr.addWidget(self.b_folder); fr.addWidget(self.b_gh); fr.addWidget(self.b_close); fr.addStretch()
         f2.addRow(fr)
-        self.b_folder.setEnabled(False); self.b_close.setEnabled(False)
+        self.b_folder.setEnabled(False); self.b_close.setEnabled(False); self.b_gh.setEnabled(False)
         row.addWidget(g2, 1)
         lay.addLayout(row)
         nxt = btn("Επόμενο: Υπογραφή αρχείων  →", lambda: main.go(1), "orange")
@@ -2291,7 +2294,7 @@ class CertPage(QWidget):
             forget_password(p)
         update_cfg(last_pfx=p)
         self.show_info(info)
-        self.b_folder.setEnabled(True); self.b_close.setEnabled(True)
+        self.b_folder.setEnabled(True); self.b_close.setEnabled(True); self.b_gh.setEnabled(True)
         log(f"Άνοιξε το πιστοποιητικό: {info['cn']} ({fmt_thumb(info['thumbprint'])})")
         if not silent:
             self.m.toast("✓ Το πιστοποιητικό άνοιξε")
@@ -2308,7 +2311,7 @@ class CertPage(QWidget):
         self.m.set_cert("", "", None, None)
         self.pw2.clear(); self.remember.setChecked(False)
         self.info.setText("Κανένα πιστοποιητικό ανοιχτό.")
-        self.b_folder.setEnabled(False); self.b_close.setEnabled(False)
+        self.b_folder.setEnabled(False); self.b_close.setEnabled(False); self.b_gh.setEnabled(False)
 
     def open_folder(self):
         if self.m.pfx:
@@ -3170,6 +3173,121 @@ class UpdateDialog(QDialog):
         e.accept()
 
 
+# ──────────────────────────── 🐙 Εξαγωγή για GitHub Actions ────────────────────────────
+GH_SECRET_PFX = "CERT_PFX_BASE64"
+GH_SECRET_PW = "CERT_PASSWORD"
+GH_DOCS = "https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions"
+GH_WORKFLOW = r"""# .github/workflows/sign.yml  (απόσπασμα — βάλτε το μετά το build)
+- name: Υπογραφή με CertifiCat πιστοποιητικό
+  shell: pwsh
+  env:
+    CERT_PFX_BASE64: ${{ secrets.CERT_PFX_BASE64 }}
+    CERT_PASSWORD:   ${{ secrets.CERT_PASSWORD }}
+  run: |
+    $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+    [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+                Sort-Object FullName -Descending | Select-Object -First 1
+    $files = Get-ChildItem dist -Recurse -Include *.exe, *.dll, *.msi
+    foreach ($f in $files) {
+      & $signtool.FullName sign /f $pfx /p $env:CERT_PASSWORD /fd SHA256 `
+        /tr http://timestamp.digicert.com /td SHA256 $f.FullName
+      if ($LASTEXITCODE) { throw "Αποτυχία υπογραφής: $($f.Name)" }
+    }
+    Remove-Item $pfx -Force
+"""
+
+
+class GitHubExportDialog(QDialog):
+    """Το .pfx σε Base64 (όπως το [Convert]::ToBase64String) για GitHub Actions Secrets."""
+    CLEAR_MS = 120000
+
+    def __init__(self, main, pfx_path, password="", cn=""):
+        super().__init__(main)
+        self.m = main; self.pfx = pfx_path; self.pw = password
+        self.setWindowTitle("Πιστοποιητικό για GitHub — " + APP_NAME); self.resize(720, 640)
+        with open(pfx_path, "rb") as f:
+            raw = f.read()
+        self.b64 = base64.b64encode(raw).decode("ascii")
+        self._clip = ""
+        self._timer = QTimer(self); self._timer.setSingleShot(True); self._timer.timeout.connect(self._clear_clip)
+        l = QVBoxLayout(self); l.setSpacing(8)
+        l.addWidget(title_block("🐙 Αυτόματη υπογραφή στο GitHub",
+                                f"Για «{cn or os.path.basename(pfx_path)}». Στο repo σας: Settings → Secrets and variables "
+                                "→ Actions → New repository secret. Φτιάξτε τα 2 secrets παρακάτω και βάλτε το workflow "
+                                "στο build σας."))
+        warn = QLabel("⚠ Το Base64 <b>είναι</b> το ιδιωτικό κλειδί σας. Βάλτε το ΜΟΝΟ σε <b>Secrets</b> — ποτέ σε κώδικα, "
+                      "README, issue ή commit. Το πρόχειρο καθαρίζει αυτόματα σε 2 λεπτά.")
+        warn.setTextFormat(Qt.TextFormat.RichText); warn.setWordWrap(True)
+        warn.setStyleSheet("background:#FFF6DD;border-radius:8px;padding:9px;color:#7A4B00;")
+        l.addWidget(warn)
+
+        g = QGroupBox("Secrets"); gl = QGridLayout(g); gl.setHorizontalSpacing(10)
+        n1 = QLabel(f"<b>1.</b> Όνομα: <code>{GH_SECRET_PFX}</code><br><span style='color:#5C6B80'>"
+                    f"Τιμή: το .pfx σε Base64 ({len(self.b64):,} χαρακτήρες)</span>")
+        n1.setTextFormat(Qt.TextFormat.RichText)
+        gl.addWidget(n1, 0, 0)
+        gl.addWidget(btn("📋 Όνομα", lambda: self._copy(GH_SECRET_PFX, "Το όνομα", False), "secondary"), 0, 1)
+        gl.addWidget(btn("📋 Αντιγραφή Base64", lambda: self._copy(self.b64, "Το Base64"), "orange"), 0, 2)
+        gl.addWidget(btn("💾 .txt…", self.save_txt, "secondary", "Αποθήκευση του Base64 σε αρχείο κειμένου"), 0, 3)
+        n2 = QLabel(f"<b>2.</b> Όνομα: <code>{GH_SECRET_PW}</code><br><span style='color:#5C6B80'>Τιμή: ο κωδικός του .pfx"
+                    + ("" if password else " — <b>δεν είναι γνωστός εδώ</b>, γράψτε τον εσείς") + "</span>")
+        n2.setTextFormat(Qt.TextFormat.RichText)
+        gl.addWidget(n2, 1, 0)
+        gl.addWidget(btn("📋 Όνομα", lambda: self._copy(GH_SECRET_PW, "Το όνομα", False), "secondary"), 1, 1)
+        bpw = btn("📋 Αντιγραφή κωδικού", lambda: self._copy(self.pw, "Ο κωδικός"), "orange"); bpw.setEnabled(bool(password))
+        gl.addWidget(bpw, 1, 2)
+        gl.setColumnStretch(0, 1)
+        l.addWidget(g)
+
+        g2 = QGroupBox("Workflow (GitHub Actions, windows-latest)"); g2l = QVBoxLayout(g2)
+        self.wf = QPlainTextEdit(GH_WORKFLOW.strip()); self.wf.setObjectName("log"); self.wf.setReadOnly(True)
+        g2l.addWidget(self.wf)
+        r = QHBoxLayout()
+        r.addWidget(btn("📋 Αντιγραφή workflow", lambda: self._copy(self.wf.toPlainText(), "Το workflow", False), "secondary"))
+        r.addWidget(btn("🌐 Οδηγίες GitHub για Secrets", lambda: QDesktopServices.openUrl(QUrl(GH_DOCS)), "secondary"))
+        r.addStretch(); g2l.addLayout(r)
+        l.addWidget(g2, 1)
+        b = QHBoxLayout(); b.addStretch(); b.addWidget(btn("Κλείσιμο", self.close)); l.addLayout(b)
+        log(f"Εξαγωγή Base64 για GitHub: {os.path.basename(pfx_path)}")
+
+    def _copy(self, text, what, secret=True):
+        QGuiApplication.clipboard().setText(text)
+        if secret:
+            self._clip = text; self._timer.start(self.CLEAR_MS)
+            self.m.toast(f"{what} αντιγράφηκε — σβήνεται από το πρόχειρο σε 2 λεπτά")
+        else:
+            self.m.toast(f"{what} αντιγράφηκε")
+
+    def _clear_clip(self):
+        cb = QGuiApplication.clipboard()
+        if self._clip and cb.text() == self._clip:
+            cb.clear()
+        self._clip = ""
+
+    def save_txt(self):
+        if QMessageBox.warning(self, APP_NAME, "Το αρχείο θα περιέχει το ιδιωτικό κλειδί (σε Base64).\n"
+                               "Κρατήστε το μόνο προσωρινά και διαγράψτε το μετά. Συνέχεια;",
+                               QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) \
+                != QMessageBox.StandardButton.Yes:
+            return
+        f, _ = QFileDialog.getSaveFileName(self, "Base64", os.path.splitext(self.pfx)[0] + "_base64.txt", "Κείμενο (*.txt)")
+        if f:
+            with open(f, "w", encoding="ascii") as fh:
+                fh.write(self.b64)
+            self.m.toast("✓ Αποθηκεύτηκε"); open_in_explorer(f)
+
+    def closeEvent(self, e):
+        # αν κλείσει πριν περάσουν τα 2 λεπτά, το πρόχειρο καθαρίζει αμέσως
+        self._timer.stop(); self._clear_clip(); e.accept()
+
+
+def open_github_export(main, pfx_path, password="", cn=""):
+    if not pfx_path or not os.path.isfile(pfx_path):
+        QMessageBox.warning(main, APP_NAME, "Δεν βρίσκεται το αρχείο .pfx."); return
+    GitHubExportDialog(main, pfx_path, password, cn).exec()
+
+
 # ──────────────────────────── ④ Κλειδοθήκη ────────────────────────────
 class VaultPage(QWidget):
     COLS = ["Πιστοποιητικό", "Λήγει", "Κωδικός", "Αρχείο .pfx"]
@@ -3202,7 +3320,8 @@ class VaultPage(QWidget):
         self.b_dir = btn("📂 Φάκελος", self.folder, "secondary")
         self.b_forget = btn("🔑 Ξέχνα κωδικό", self.forget, "secondary", "Σβήνει μόνο τον αποθηκευμένο κωδικό")
         self.b_del = btn("🗑 Αφαίρεση", self.remove, "secondary", "Αφαίρεση από τη λίστα — τα αρχεία .pfx/.cer ΔΕΝ διαγράφονται")
-        for b in (self.b_use, self.b_copy, self.b_show, self.b_dir, self.b_forget, self.b_del):
+        self.b_gh = btn("🐙 GitHub", self.github, "secondary", "Το .pfx σε Base64 για GitHub Actions Secrets")
+        for b in (self.b_use, self.b_copy, self.b_show, self.b_dir, self.b_gh, self.b_forget, self.b_del):
             r.addWidget(b)
         r.addStretch(); lay.addLayout(r)
         g = QGroupBox("💾 Αντίγραφο ασφαλείας"); gl = QHBoxLayout(g)
@@ -3248,6 +3367,7 @@ class VaultPage(QWidget):
         has = bool(r); pw = bool(r and r.get("pw_enc"))
         for b in (self.b_use, self.b_dir, self.b_del):
             b.setEnabled(has)
+        self.b_gh.setEnabled(bool(r and os.path.isfile(r["pfx_path"])))
         for b in (self.b_copy, self.b_show, self.b_forget):
             b.setEnabled(pw)
 
@@ -3292,6 +3412,11 @@ class VaultPage(QWidget):
             d.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             d.setText(f"Κωδικός για <b>{self.cur().get('cn', '')}</b>:<br><br>"
                       f"<code style='font-size:13pt'>{pw}</code>"); d.exec()
+
+    def github(self):
+        r = self.cur()
+        if r:
+            open_github_export(self.m, r["pfx_path"], recall_password(r["pfx_path"]), r.get("cn", ""))
 
     def folder(self):
         r = self.cur()
@@ -3344,11 +3469,13 @@ HELP = """<h2>Πώς δουλεύει</h2>
 <h3>Γρήγορα</h3>
 <ul>
 <li><b>Δεξί κλικ → Αποστολή προς:</b> στο βήμα ② πατήστε «📌 Δεξί κλικ → «Αποστολή προς»». Μετά υπογράφετε απευθείας από τον Explorer.</li>
-<li><b>Από build script:</b> <code>pythonw CertifiCat_v3.5.pyw --sign dist\\MyApp.exe</code></li>
+<li><b>Από build script:</b> <code>pythonw CertifiCat_v3.6.pyw --sign dist\\MyApp.exe</code></li>
 <li><b>Χρονοσήμανση:</b> αν ένας διακομιστής δεν απαντά, δοκιμάζονται αυτόματα οι άλλοι. Χωρίς internet διαλέξτε «Χωρίς χρονοσήμανση».</li>
 <li><b>Καταγραφή:</b> όλα τα μηνύματα των signtool/PowerShell, για όταν κάτι αποτύχει.</li>
 <li><b>Κλειδοθήκη (④):</b> λίστα με όλα τα πιστοποιητικά σας. Ο κωδικός φυλάσσεται μόνο αν το επιλέξετε,
 κρυπτογραφημένος, σε τοπική βάση (<code>%APPDATA%\\CertifiCat\\certificat.db</code>).</li>
+<li><b>🐙 GitHub:</b> στο ① ή στην ④, το κουμπί «GitHub» δίνει το .pfx σε Base64 και τον κωδικό για τα
+<i>Secrets</i> του repo, μαζί με έτοιμο workflow ώστε το GitHub Actions να υπογράφει μόνο του σε κάθε build.</li>
 <li><b>Ενημερώσεις:</b> ελέγχονται από τις δημόσιες εκδόσεις στο GitHub. Η εφαρμογή δεν στέλνει κανένα προσωπικό στοιχείο.</li>
 </ul>
 <p><b>Ασφάλεια:</b> τα πιστοποιητικά της εφαρμογής επιτρέπονται ΜΟΝΟ για υπογραφή προγραμμάτων και δεν μπορούν να
