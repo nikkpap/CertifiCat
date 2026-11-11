@@ -49,10 +49,11 @@ Get the latest **`CertifiCat_v*.pyw`** from **[Releases](https://github.com/nikk
 - **Timestamping (RFC 3161)** with automatic fallback: DigiCert → Sectigo → GlobalSign.
 - **Verification** of every file after signing, plus **skip already-signed** files.
 - **Right-click → Send to → CertifiCat** to sign straight from Explorer.
-- **Command line** for build scripts: `pythonw CertifiCat_v3.5.pyw --sign dist\MyApp.exe`
+- **Command line** for build scripts: `pythonw CertifiCat_v3.6.pyw --sign dist\MyApp.exe`
 - **Install for me / for all users** (a single UAC prompt), uninstall, and status check (Root + Trusted Publishers).
 - **Installer package** (`.zip`) for other PCs: contains only the public `.cer` and a `.bat`.
 - **Log** of every signtool / PowerShell message.
+- **🐙 GitHub Actions export:** the certificate as Base64 + password for repo *Secrets*, with a ready-made signing workflow.
 - **OTA updates** from public GitHub Releases.
 
 ---
@@ -74,19 +75,22 @@ Get the latest **`CertifiCat_v*.pyw`** from **[Releases](https://github.com/nikk
 
 ## 📦 Publishing a release (maintainer)
 
-1. Change `APP_VERSION` in the `.pyw` file, e.g. `3.6.0`.
-2. Create a GitHub Release with tag **`v3.6.0`** and attach:
-   - `CertifiCat_v3.6.pyw`
-   - `CertifiCat_v3.6.pyw.sha256` (optional but recommended): `certutil -hashfile CertifiCat_v3.6.pyw SHA256`, or `sha256sum CertifiCat_v3.6.pyw > CertifiCat_v3.6.pyw.sha256`
-   - optionally `CertifiCat.exe` (+ `.sha256`) for the compiled build. Sign it with CertifiCat itself.
-3. Installed copies will find the update on their next start.
+Releases are created **automatically** by GitHub Actions (`.github/workflows/release.yml`) using the
+built-in `GITHUB_TOKEN`. No secrets are stored in the repo.
+
+1. In `CertifiCat_vX.Y.pyw` set `APP_VERSION = "X.Y.Z"` and rename the file to the new version.
+2. Optional: add release notes in `release-notes/vX.Y.Z.md`.
+3. Push a tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+
+The workflow checks that the tag matches `APP_VERSION`, computes `*.sha256` and publishes the release with
+`CertifiCat_vX.Y.pyw` + `CertifiCat_vX.Y.pyw.sha256`. Installed copies update themselves (OTA) on their next start.
 
 ---
 
 ## 📁 Repository
 
 ```
-CertifiCat_v3.5.pyw     ← the app (single file)
+CertifiCat_v3.6.pyw     ← the app (single file)
 tools/                  ← signtool.exe & helpers (optional, auto-detected)
 screenshots/v3.5/       ← screenshots
 legacy/                 ← older Tkinter version (v2.5)
