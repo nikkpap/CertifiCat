@@ -34,6 +34,7 @@ Get the latest **`CertifiCat_v*.pyw`** from **[Releases](https://github.com/nikk
 | ② | **Υπογραφή** (Sign) | Drag & drop files or folders, then click **Υπογραφή όλων** (Sign all). Re-sign after every new build. |
 | ③ | **Εγκατάσταση** (Install) | One click on this PC. Other PCs get the zip: unzip and double-click `Install_Certificate.bat`. |
 | ④ | **Κλειδοθήκη** (Vault) | A list of all your certificates. If you choose to, it also keeps their passwords, encrypted on this PC. |
+| ⑤ | **Open Source** | Free, publicly trusted signing through SignPath Foundation, for OSI-licensed projects built on GitHub Actions. |
 
 <p>
 <img src="screenshots/v3.5/1_certificate.png" width="49%"> <img src="screenshots/v3.5/3_install.png" width="49%">
@@ -53,6 +54,7 @@ Get the latest **`CertifiCat_v*.pyw`** from **[Releases](https://github.com/nikk
 - **Install for me / for all users** (a single UAC prompt), uninstall, and status check (Root + Trusted Publishers).
 - **Installer package** (`.zip`) for other PCs: contains only the public `.cer` and a `.bat`.
 - **Log** of every signtool / PowerShell message.
+- **⑤ Free public signing for open source:** a guide to [SignPath Foundation](https://signpath.org/). It checks whether your GitHub repo is eligible and generates the signing workflow, `CODE_SIGNING_POLICY.md` and the artifact configuration.
 - **🐙 GitHub Actions export:** the certificate as Base64 + password for repo *Secrets*, with a ready-made signing workflow.
 - **OTA updates** from public GitHub Releases.
 
