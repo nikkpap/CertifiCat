@@ -1,13 +1,22 @@
 # Αυτόματο release για το OTA του CertifiCat.
-# Ενεργοποιείται με push ενός tag vX.Y.Z — χρησιμοποιεί ΜΟΝΟ το ενσωματωμένο GITHUB_TOKEN (κανένα secret).
+# Τρέχει όταν αλλάζει το app στο main (ή χειροκίνητα / με tag). Διαβάζει το APP_VERSION από το .pyw και,
+# αν δεν υπάρχει ήδη release vX.Y.Z, φτιάχνει tag + release με .pyw και .sha256.
+# Χρησιμοποιεί ΜΟΝΟ το ενσωματωμένο GITHUB_TOKEN — κανένα secret στο repo.
 name: Release
 
 on:
   push:
+    branches: [main]
+    paths: ["CertifiCat_v*.pyw", "release-notes/**", ".github/workflows/release.yml"]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -15,24 +24,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check version & build checksum
+      - name: Read version & build checksum
+        id: v
         run: |
           set -euo pipefail
-          VER="${GITHUB_REF_NAME#v}"
           FILE=$(ls CertifiCat_v*.pyw | head -n1)
-          echo "File: $FILE  Tag: $GITHUB_REF_NAME"
-          grep -q "APP_VERSION = \"$VER\"" "$FILE" || { echo "::error::APP_VERSION in $FILE does not match tag $GITHUB_REF_NAME"; exit 1; }
+          VER=$(grep -m1 -oP '^APP_VERSION = "\K[0-9.]+' "$FILE")
+          TAG="v$VER"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$TAG" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match APP_VERSION $VER"; exit 1
+          fi
           python3 -m py_compile "$FILE"
           sha256sum "$FILE" > "$FILE.sha256"
           cat "$FILE.sha256"
-          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"   >> "$GITHUB_OUTPUT"
+          echo "ver=$VER"   >> "$GITHUB_OUTPUT"
 
-      - name: Publish release
+      - name: Publish release (if new version)
         env:
           GH_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.v.outputs.file }}
+          TAG: ${{ steps.v.outputs.tag }}
+          VER: ${{ steps.v.outputs.ver }}
         run: |
           set -euo pipefail
-          NOTES="release-notes/${GITHUB_REF_NAME}.md"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — nothing to do."; exit 0
+          fi
+          NOTES="release-notes/$TAG.md"
           if [ -f "$NOTES" ]; then ARGS=(--notes-file "$NOTES"); else ARGS=(--generate-notes); fi
-          gh release create "$GITHUB_REF_NAME" "$FILE" "$FILE.sha256" \
-            --title "CertifiCat ${GITHUB_REF_NAME#v}" --latest "${ARGS[@]}"
+          gh release create "$TAG" "$FILE" "$FILE.sha256" --target "$GITHUB_SHA" \
+            --title "CertifiCat $VER" --latest "${ARGS[@]}"
+          echo "Published $TAG"
