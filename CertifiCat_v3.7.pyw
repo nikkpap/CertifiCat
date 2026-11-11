@@ -8,11 +8,11 @@ CertifiCat — Self-signed πιστοποιητικά υπογραφής κώδ�
 και μόνο αν το ζητήσει (κρυπτογραφημένο με τον λογαριασμό του στα Windows).
 
 Χρήση από γραμμή εντολών / «Αποστολή προς»:
-    CertifiCat_v3.6.pyw  αρχείο1.exe  φάκελος/       → ανοίγει με τα αρχεία στη λίστα
-    CertifiCat_v3.6.pyw  --sign  αρχείο1.exe ...     → τα υπογράφει αμέσως (με το τελευταίο πιστοποιητικό)
+    CertifiCat_v3.7.pyw  αρχείο1.exe  φάκελος/       → ανοίγει με τα αρχεία στη λίστα
+    CertifiCat_v3.7.pyw  --sign  αρχείο1.exe ...     → τα υπογράφει αμέσως (με το τελευταίο πιστοποιητικό)
 """
 APP_NAME = "CertifiCat"
-APP_VERSION = "3.6.0"
+APP_VERSION = "3.7.0"
 APP_AUTHOR = "ALU DEV TEAM"
 
 # ---- Στοιχεία δημιουργού (εμφανίζονται στο «Σχετικά») ----
@@ -146,7 +146,8 @@ from PyQt6.QtGui import (QIcon, QPixmap, QPainter, QColor, QLinearGradient, QBru
 from PyQt6.QtWidgets import (QApplication, QWidget, QMainWindow, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
                              QGridLayout, QStackedWidget, QLineEdit, QSpinBox, QComboBox, QCheckBox, QFileDialog,
                              QMessageBox, QGroupBox, QFormLayout, QTableWidget, QTableWidgetItem, QHeaderView,
-                             QAbstractItemView, QProgressBar, QTextEdit, QPlainTextEdit, QDialog, QMenu)
+                             QAbstractItemView, QProgressBar, QTextEdit, QPlainTextEdit, QDialog, QMenu,
+                             QTabWidget, QScrollArea, QTextBrowser)
 
 SIGNABLE = (".exe", ".dll", ".msi", ".sys", ".ocx", ".cab", ".cat", ".ps1", ".psm1", ".psd1",
             ".msix", ".appx", ".msixbundle", ".appxbundle", ".vbs", ".js")
@@ -3052,7 +3053,7 @@ def apply_update(tmp, asset_name=""):
             os.replace(tmp, target)
             subprocess.Popen([target], close_fds=True)
         else:
-            # το νέο .pyw παίρνει το όνομα του release (π.χ. CertifiCat_v3.6.pyw)· το παλιό μένει ως .bak
+            # το νέο .pyw παίρνει το όνομα του release (π.χ. CertifiCat_v3.7.pyw)· το παλιό μένει ως .bak
             name = os.path.basename(asset_name or "") or os.path.basename(target)
             new = os.path.join(os.path.dirname(target), name)
             shutil.copy2(target, target + ".bak")
@@ -3459,6 +3460,441 @@ class VaultPage(QWidget):
 
 
 
+# ════════════════════════════════════════════════════════════════════
+# 7. ⑤ Open Source: δωρεάν, δημόσια αναγνωρισμένη υπογραφή (SignPath Foundation)
+# ════════════════════════════════════════════════════════════════════
+SP_LINKS = {
+    "home": "https://signpath.org/",
+    "terms": "https://signpath.org/terms",
+    "gh": "https://docs.signpath.io/trusted-build-systems/github",
+    "ms": "https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options",
+}
+# Άδειες OSI (SPDX) που συναντώνται συχνά στο GitHub
+OSI_SPDX = {
+    "MIT", "MIT-0", "Apache-2.0", "GPL-2.0", "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0", "GPL-3.0-only",
+    "GPL-3.0-or-later", "LGPL-2.1", "LGPL-2.1-only", "LGPL-2.1-or-later", "LGPL-3.0", "LGPL-3.0-only",
+    "LGPL-3.0-or-later", "AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later", "BSD-2-Clause", "BSD-3-Clause",
+    "BSD-3-Clause-Clear", "0BSD", "MPL-2.0", "ISC", "Zlib", "Unlicense", "EPL-1.0", "EPL-2.0", "BSL-1.0",
+    "MS-PL", "MS-RL", "EUPL-1.1", "EUPL-1.2", "Artistic-2.0", "OSL-3.0", "AFL-3.0", "ECL-2.0", "NCSA",
+    "UPL-1.0", "PostgreSQL", "OFL-1.1", "CECILL-2.1", "MulanPSL-2.0", "WTFPL",
+}
+
+
+def parse_repo(text):
+    t = (text or "").strip().rstrip("/")
+    m = re.search(r"github\.com[/:]([^/\s]+)/([^/\s#?]+)", t)
+    if m:
+        owner, repo = m.group(1), m.group(2)
+    elif re.fullmatch(r"[\w.-]+/[\w.-]+", t):
+        owner, repo = t.split("/")
+    else:
+        return None
+    return f"{owner}/{repo[:-4] if repo.endswith('.git') else repo}"
+
+
+def check_oss_repo(repo):
+    """Έλεγχος (ανώνυμα, δημόσιο GitHub API) αν ένα repo πληροί τις βασικές προϋποθέσεις του SignPath Foundation.
+    → dict(ok, repo, owner, name, items=[(icon, text)], msg)"""
+    out = {"ok": False, "repo": repo, "items": []}
+    add = lambda icon, text: out["items"].append((icon, text))
+    try:
+        with _http(f"https://api.github.com/repos/{repo}") as r:
+            d = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as ex:
+        out["msg"] = ("Δεν βρέθηκε δημόσιο repo με αυτό το όνομα (ή είναι ιδιωτικό)." if ex.code == 404
+                      else f"GitHub: σφάλμα {ex.code} (ίσως όριο αιτημάτων — ξαναδοκιμάστε σε λίγο).")
+        return out
+    except Exception as ex:
+        out["msg"] = f"Χωρίς σύνδεση με το GitHub ({type(ex).__name__})."
+        return out
+    out.update(owner=d["owner"]["login"], name=d["name"], repo=d["full_name"], branch=d.get("default_branch", "main"))
+    good = True
+    if d.get("private"):
+        add("❌", "Το repo είναι ιδιωτικό — πρέπει να είναι δημόσιο."); good = False
+    else:
+        add("✅", "Δημόσιο repo")
+    spdx = ((d.get("license") or {}).get("spdx_id") or "").strip()
+    if not spdx or spdx == "NOASSERTION":
+        add("❌", "Δεν αναγνωρίστηκε άδεια — προσθέστε LICENSE με άδεια OSI (π.χ. MIT, GPL-3.0)."); good = False
+    elif spdx in OSI_SPDX:
+        add("✅", f"Άδεια OSI: {spdx}")
+    else:
+        add("⚠", f"Άδεια {spdx}: ελέγξτε ότι είναι εγκεκριμένη από το OSI (opensource.org)."); good = False
+    if d.get("archived"):
+        add("❌", "Το repo είναι αρχειοθετημένο — απαιτείται ενεργή συντήρηση."); good = False
+    else:
+        pushed = (d.get("pushed_at") or "")[:10]
+        try:
+            age = (datetime.now(timezone.utc) - datetime.strptime(pushed, "%Y-%m-%d").replace(tzinfo=timezone.utc)).days
+        except ValueError:
+            age = 9999
+        add("✅" if age <= 365 else "⚠", f"Τελευταία αλλαγή: {pushed or '—'}" +
+            ("" if age <= 365 else " — φαίνεται ανενεργό, απαιτείται ενεργή συντήρηση"))
+    try:
+        with _http(f"https://api.github.com/repos/{repo}/releases?per_page=1") as r:
+            rel = json.loads(r.read().decode("utf-8"))
+        if rel:
+            add("✅", f"Υπάρχει δημοσιευμένο release ({rel[0].get('tag_name', '')})")
+        else:
+            add("❌", "Κανένα release ακόμα — το έργο πρέπει να έχει ήδη κυκλοφορήσει."); good = False
+    except Exception:
+        add("⚠", "Δεν ελέγχθηκαν τα releases.")
+    try:
+        with _http(f"https://api.github.com/repos/{repo}/readme", accept="application/vnd.github.raw") as r:
+            readme = r.read().decode("utf-8", "replace").lower()
+        if "code signing policy" in readme:
+            add("✅", "Το README αναφέρει «Code signing policy»")
+        else:
+            add("⚠", "Το README δεν έχει ενότητα «Code signing policy» — τη φτιάχνει η καρτέλα «2 · Αρχεία».")
+    except Exception:
+        add("⚠", "Δεν βρέθηκε README — χρειάζεται σελίδα με περιγραφή και «Code signing policy».")
+    for t in ("Χρησιμοποιείτε MFA (2FA) στο GitHub και στο SignPath",
+              "Όλος ο κώδικας είναι δικός σας / open source (χωρίς κλειστά κομμάτια)",
+              "Δεν είναι εργαλείο hacking και δεν στέλνει δεδομένα χωρίς ενημέρωση του χρήστη",
+              "Το build γίνεται στο GitHub Actions (GitHub-hosted runners)"):
+        add("☐", t + " (ελέγξτε το εσείς)")
+    out["ok"] = good
+    out["msg"] = ("Το repo φαίνεται κατάλληλο — μπορείτε να κάνετε αίτηση." if good else
+                  "Διορθώστε τα ❌ πριν κάνετε αίτηση.")
+    return out
+
+
+SP_WORKFLOW = r"""# Δημιουργήθηκε από το CertifiCat — δωρεάν υπογραφή από SignPath Foundation (open source)
+# Αποθηκεύστε ως .github/workflows/signpath-sign.yml
+# Χρειάζεται 1 secret στο repo: SIGNPATH_API_TOKEN (SignPath → Users → CI user → API token)
+name: Build & Sign (SignPath)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-and-sign:
+    runs-on: windows-latest        # το SignPath Foundation απαιτεί GitHub-hosted runners
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── 1. Build ─────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        shell: pwsh
+        run: |
+__BUILD__
+
+      # ── 2. Ανέβασμα του ΑΥΠΟΓΡΑΦΟΥ αρχείου (το SignPath το παίρνει από εδώ) ──
+      - name: Upload unsigned
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned
+          path: __ARTIFACT__
+          if-no-files-found: error
+
+      # ── 3. Υπογραφή (περιμένει την έγκριση του Approver στο SignPath) ──
+      - name: Sign with SignPath
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: "__ORG__"
+          project-slug: "__PROJECT__"
+          signing-policy-slug: "__POLICY__"
+__ARTCFG__          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+
+      # ── 4. Τα υπογεγραμμένα αρχεία ──
+      - name: Upload signed
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed
+          path: signed
+      - name: Attach to release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem signed -Recurse -File | ForEach-Object FullName
+          gh release upload "${{ github.event.release.tag_name }}" $files --clobber
+"""
+
+SP_BUILD_DEFAULT = """python -m pip install --upgrade pip pyinstaller
+if (Test-Path requirements.txt) { pip install -r requirements.txt }
+pyinstaller --onefile --noconsole --name "__NAME__" __SCRIPT__"""
+
+SP_POLICY = """# Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+## Team roles
+
+- Committers and reviewers: [__OWNER__](https://github.com/__OWNER__)
+- Approvers: [__OWNER__](https://github.com/__OWNER__)
+
+## Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.__UPDATES__
+"""
+SP_POLICY_UPDATES = ("\n\nException: the program checks the public GitHub Releases of this repository for updates. "
+                     "No personal data is sent, and the automatic check can be turned off in the program.")
+
+SP_README = """## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+Team roles and privacy policy: [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
+"""
+
+SP_ARTCFG = """<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath → Project → Artifact configurations. Το artifact του GitHub είναι zip. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="*.exe" max-matches="unbounded">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
+"""
+
+OPTIONS_HTML = """
+<style>td{padding:6px 8px;vertical-align:top;} th{background:#362044;color:white;padding:6px 8px;text-align:left;}</style>
+<h3>Ποια υπογραφή μου ταιριάζει;</h3>
+<table cellspacing="0" border="0" width="100%">
+<tr><th>Επιλογή</th><th>Κόστος</th><th>Τι βλέπει ο χρήστης</th><th>Για ποιον</th></tr>
+<tr style="background:#FFFFFF"><td><b>Self-signed</b><br>(βήματα ①–④)</td><td>Δωρεάν</td>
+<td>Το όνομά σας — <b>μόνο</b> στους υπολογιστές που εγκαταστάθηκε το .cer· αλλού «Άγνωστος εκδότης»</td>
+<td>Δικά σας PC, γραφείο, συνεργάτες</td></tr>
+<tr style="background:#F1FAF3"><td><b>SignPath Foundation</b> ⭐</td><td><b>Δωρεάν</b> για open source</td>
+<td>«SignPath Foundation» σε <b>κάθε</b> υπολογιστή (δημόσια αναγνωρισμένο OV πιστοποιητικό)</td>
+<td>Δημόσια έργα με άδεια OSI στο GitHub, build στο GitHub Actions</td></tr>
+<tr style="background:#FFFFFF"><td><b>Microsoft Store (MSIX)</b></td><td>Δωρεάν υπογραφή</td>
+<td>Υπογραφή της Microsoft, εγκατάσταση από το Store</td><td>Εφαρμογές που μπορούν να γίνουν πακέτο MSIX</td></tr>
+<tr style="background:#FFFFFF"><td><b>Αγορά πιστοποιητικού</b><br>(π.χ. Certum Open Source, OV/EV)</td><td>Ετήσιο κόστος</td>
+<td>Το <b>δικό σας</b> όνομα παντού</td><td>Όταν θέλετε το όνομά σας ή κλειστό κώδικα</td></tr>
+<tr style="background:#FFFFFF"><td><b>Azure Artifact Signing</b></td><td>Μηνιαία συνδρομή</td>
+<td>Το όνομά σας παντού</td><td>Ιδιώτες μόνο σε ΗΠΑ/Καναδά· εταιρείες και σε ΕΕ/ΗΒ</td></tr>
+</table>
+<h3>SignPath Foundation — τι χρειάζεται</h3>
+<ul>
+<li>Δημόσιο repo στο GitHub με άδεια <b>OSI</b> (MIT, GPL-3.0, Apache-2.0…), χωρίς κλειστά κομμάτια.</li>
+<li>Το έργο να έχει ήδη κυκλοφορήσει και να συντηρείται.</li>
+<li>Το build να γίνεται <b>αυτόματα στο GitHub Actions</b> — το SignPath υπογράφει μόνο ό,τι χτίστηκε από τον δημόσιο κώδικα.</li>
+<li>Κάθε release <b>εγκρίνεται χειροκίνητα</b> από εσάς (Approver) στο SignPath.</li>
+<li>Σελίδα <b>«Code signing policy»</b> με την αναφορά στο SignPath, τους ρόλους της ομάδας και δήλωση ιδιωτικότητας.</li>
+<li>MFA (2FA) στο GitHub και στο SignPath.</li>
+</ul>
+<p>⚠ Ο εκδότης που βλέπει ο χρήστης είναι το <b>«SignPath Foundation»</b>, όχι το όνομά σας. Ένα <code>.pyw</code> δεν
+υπογράφεται — χρειάζεται <code>.exe</code> (π.χ. PyInstaller) ή <code>.msi</code>. Το SmartScreen χτίζει φήμη με τον χρόνο.</p>
+<h3>Βήματα</h3>
+<ol>
+<li><b>1 · Έλεγχος:</b> γράψτε το repo σας και δείτε αν πληροί τις προϋποθέσεις.</li>
+<li><b>Αίτηση</b> στο signpath.org (κουμπί «Αίτηση»). Η έγκριση γίνεται από τους ανθρώπους του SignPath.</li>
+<li>Μετά την έγκριση, στο SignPath σημειώστε <i>Organization ID</i>, <i>Project slug</i>, <i>Signing policy slug</i>
+και φτιάξτε <i>CI user</i> → <i>API token</i>.</li>
+<li>GitHub repo → Settings → Secrets and variables → Actions → secret <code>SIGNPATH_API_TOKEN</code>.</li>
+<li><b>2 · Αρχεία:</b> συμπληρώστε τα στοιχεία → «Αποθήκευση στον φάκελο του repo» → commit &amp; push.</li>
+<li>Δημοσιεύστε release: το workflow χτίζει, στέλνει στο SignPath, εγκρίνετε, και το υπογεγραμμένο exe μπαίνει στο release.
+Ελέγξτε το με το βήμα ② «Έλεγχος υπογραφών».</li>
+</ol>
+"""
+
+
+class OpenSourcePage(QWidget):
+    def __init__(self, main):
+        super().__init__(); self.setObjectName("page"); self.m = main
+        cfg = load_cfg().get("signpath", {}) or {}
+        lay = QVBoxLayout(self); lay.setContentsMargins(26, 18, 26, 18); lay.setSpacing(6)
+        lay.addWidget(title_block("⑤ Δωρεάν υπογραφή για Open Source",
+                                  "Δημόσια αναγνωρισμένη υπογραφή σε κάθε υπολογιστή, χωρίς κόστος, για έργα ανοιχτού κώδικα "
+                                  "στο GitHub — μέσω SignPath Foundation."))
+        top = QHBoxLayout()
+        for t, k in (("🌐 Αίτηση στο SignPath", "home"), ("📜 Προϋποθέσεις", "terms"), ("📘 Οδηγίες GitHub", "gh"),
+                     ("🪟 Επιλογές Microsoft", "ms")):
+            top.addWidget(btn(t, lambda _=False, u=SP_LINKS[k]: QDesktopServices.openUrl(QUrl(u)),
+                              "orange" if k == "home" else "secondary"))
+        top.addStretch(); lay.addLayout(top)
+        self.tabs = QTabWidget(); lay.addWidget(self.tabs, 1)
+        self.tabs.setStyleSheet("QTabWidget::pane{border:1px solid #DDE3EC;border-radius:8px;background:white;top:-1px;}"
+                                "QTabBar::tab{background:#E9E4F0;color:#362044;padding:8px 16px;border-top-left-radius:8px;"
+                                "border-top-right-radius:8px;margin-right:2px;font-weight:600;}"
+                                "QTabBar::tab:selected{background:white;}")
+        # ---- tab: επιλογές ----
+        info = QTextBrowser(); info.setOpenExternalLinks(True); info.setHtml(OPTIONS_HTML)
+        info.setStyleSheet("QTextBrowser{border:none;padding:6px;background:white;color:#1F2A3D;}")
+        self.tabs.addTab(info, "Επιλογές && βήματα")
+        # ---- tab: έλεγχος ----
+        w1 = QWidget(); l1 = QVBoxLayout(w1)
+        r = QHBoxLayout()
+        self.repo = QLineEdit(cfg.get("repo", "")); self.repo.setPlaceholderText("owner/repo ή https://github.com/owner/repo")
+        self.repo.returnPressed.connect(self.check)
+        self.b_check = btn("🔍 Έλεγχος", self.check)
+        r.addWidget(QLabel("Repo στο GitHub:")); r.addWidget(self.repo, 1); r.addWidget(self.b_check); l1.addLayout(r)
+        self.result = QLabel("Γράψτε το repo σας και πατήστε «Έλεγχος». Γίνεται ανώνυμα από το δημόσιο GitHub, "
+                             "χωρίς κανένα κλειδί.")
+        self.result.setTextFormat(Qt.TextFormat.RichText); self.result.setWordWrap(True)
+        self.result.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.result.setStyleSheet("background:#F4F6FA;border-radius:8px;padding:12px;")
+        l1.addWidget(self.result, 1)
+        self.tabs.addTab(w1, "1 · Έλεγχος repo")
+        # ---- tab: αρχεία ----
+        w2 = QWidget(); l2 = QHBoxLayout(w2)
+        form = QWidget(); fl = QFormLayout(form); fl.setContentsMargins(0, 0, 0, 0)
+        self.f_name = QLineEdit(cfg.get("name", "")); self.f_name.setPlaceholderText("π.χ. MyApp")
+        self.f_owner = QLineEdit(cfg.get("owner", "")); self.f_owner.setPlaceholderText("GitHub χρήστης (Approver)")
+        self.f_org = QLineEdit(cfg.get("org", "")); self.f_org.setPlaceholderText("από το SignPath (μετά την έγκριση)")
+        self.f_proj = QLineEdit(cfg.get("project", "")); self.f_proj.setPlaceholderText("project slug")
+        self.f_pol = QLineEdit(cfg.get("policy", "release-signing"))
+        self.f_art = QLineEdit(cfg.get("artcfg", "")); self.f_art.setPlaceholderText("προαιρετικό")
+        self.f_script = QLineEdit(cfg.get("script", "main.py"))
+        self.f_path = QLineEdit(cfg.get("artifact", "dist/*.exe"))
+        self.f_build = QPlainTextEdit(cfg.get("build", SP_BUILD_DEFAULT)); self.f_build.setFixedHeight(84)
+        self.f_build.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.f_build.setStyleSheet("QPlainTextEdit{font-family:Consolas,'DejaVu Sans Mono',monospace;font-size:9pt;"
+                                   "border:1px solid #CBD3E1;border-radius:6px;}")
+        self.f_upd = QCheckBox("Ελέγχει για ενημερώσεις"); self.f_upd.setChecked(cfg.get("updates", False))
+        self.f_upd.setToolTip("Προσθέτει την αντίστοιχη εξαίρεση στη δήλωση ιδιωτικότητας")
+        for lab, wdg in (("Όνομα εφαρμογής:", self.f_name), ("Συντηρητής:", self.f_owner),
+                         ("Organization ID:", self.f_org), ("Project slug:", self.f_proj),
+                         ("Signing policy:", self.f_pol), ("Artifact config:", self.f_art),
+                         ("Κύριο script:", self.f_script), ("Αρχεία για υπογραφή:", self.f_path),
+                         ("Εντολές build:", self.f_build), ("", self.f_upd)):
+            fl.addRow(lab, wdg)
+        bb = QHBoxLayout()
+        bb.addWidget(btn("💾 Αποθήκευση στο repo…", self.save_all, "orange",
+                         "Γράφει το workflow, το CODE_SIGNING_POLICY.md και το artifact-configuration.xml στον φάκελο του repo"))
+        fl.addRow(bb)
+        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setWidget(form); sc.setFrameShape(QScrollArea.Shape.NoFrame)
+        sc.setMinimumWidth(450)
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        l2.addWidget(sc, 1)
+        right = QVBoxLayout()
+        self.out_tabs = QTabWidget()
+        self.out = {}
+        for key, title in (("workflow", "signpath-sign.yml"), ("policy", "CODE_SIGNING_POLICY.md"),
+                           ("readme", "README (ενότητα)"), ("artcfg", "artifact-configuration.xml")):
+            e = QPlainTextEdit(); e.setObjectName("log"); e.setReadOnly(True)
+            e.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+            self.out[key] = e; self.out_tabs.addTab(e, title)
+        right.addWidget(self.out_tabs, 1)
+        cr = QHBoxLayout()
+        cr.addWidget(btn("📋 Αντιγραφή", self.copy_current, "secondary"))
+        note = QLabel("Secret στο GitHub: <code>SIGNPATH_API_TOKEN</code>"); note.setTextFormat(Qt.TextFormat.RichText)
+        note.setObjectName("subtitle"); cr.addWidget(note); cr.addStretch()
+        right.addLayout(cr)
+        l2.addLayout(right, 1)
+        self.tabs.addTab(w2, "2 · Αρχεία για το repo")
+        for wdg in (self.f_name, self.f_owner, self.f_org, self.f_proj, self.f_pol, self.f_art, self.f_script, self.f_path):
+            wdg.textChanged.connect(self.render)
+        self.f_build.textChanged.connect(self.render); self.f_upd.toggled.connect(self.render)
+        self.render()
+
+    # ---- έλεγχος ----
+    def check(self):
+        repo = parse_repo(self.repo.text())
+        if not repo:
+            self.result.setText("<span style='color:#B34700'>Γράψτε το repo ως <b>owner/repo</b> ή ως διεύθυνση GitHub.</span>")
+            return
+        self.b_check.setEnabled(False); self.result.setText(f"⏳ Έλεγχος του <b>{repo}</b> στο GitHub…")
+        run_task(check_oss_repo, repo, done=self._checked)
+
+    def _checked(self, res):
+        self.b_check.setEnabled(True)
+        if not isinstance(res, dict):
+            self.result.setText(f"❌ {res}"); return
+        if not res.get("items"):
+            self.result.setText(f"❌ {res.get('msg', '')}"); return
+        col = "#1E8449" if res["ok"] else "#B34700"
+        rows = "".join(f"<tr><td style='padding:3px 8px 3px 0'>{i}</td><td style='padding:3px 0'>{t}</td></tr>"
+                       for i, t in res["items"])
+        self.result.setText(f"<b style='font-size:12pt'>{res['repo']}</b><br><br><table>{rows}</table><br>"
+                            f"<b style='color:{col}'>{res['msg']}</b>")
+        log(f"Έλεγχος open source: {res['repo']} → {res['msg']}")
+        update_cfg(signpath={**(load_cfg().get("signpath") or {}), "repo": res["repo"]})
+        if not self.f_owner.text():
+            self.f_owner.setText(res.get("owner", ""))
+        if not self.f_name.text():
+            self.f_name.setText(res.get("name", ""))
+
+    # ---- αρχεία ----
+    def values(self):
+        return {"name": self.f_name.text().strip() or "MyApp", "owner": self.f_owner.text().strip() or "your-github-user",
+                "org": self.f_org.text().strip() or "<organization-id>", "project": self.f_proj.text().strip() or "<project-slug>",
+                "policy": self.f_pol.text().strip() or "release-signing", "artcfg": self.f_art.text().strip(),
+                "script": self.f_script.text().strip() or "main.py", "artifact": self.f_path.text().strip() or "dist/*.exe",
+                "build": self.f_build.toPlainText().rstrip() or SP_BUILD_DEFAULT, "updates": self.f_upd.isChecked()}
+
+    def render(self):
+        v = self.values()
+        build = v["build"].replace("__NAME__", v["name"]).replace("__SCRIPT__", v["script"])
+        build = "\n".join("          " + ln if ln.strip() else "" for ln in build.splitlines())
+        art = f'          artifact-configuration-slug: "{v["artcfg"]}"\n' if v["artcfg"] else ""
+        wf = (SP_WORKFLOW.replace("__BUILD__", build).replace("__ARTIFACT__", v["artifact"])
+              .replace("__ORG__", v["org"]).replace("__PROJECT__", v["project"]).replace("__POLICY__", v["policy"])
+              .replace("__ARTCFG__", art))
+        pol = SP_POLICY.replace("__OWNER__", v["owner"]).replace("__UPDATES__", SP_POLICY_UPDATES if v["updates"] else "")
+        texts = {"workflow": wf, "policy": pol, "readme": SP_README, "artcfg": SP_ARTCFG}
+        for k, t in texts.items():
+            self.out[k].setPlainText(t)
+        self._texts = texts
+        keep = {k: v[k] for k in ("name", "owner", "org", "project", "policy", "artcfg", "script", "artifact", "updates")}
+        keep["build"] = self.f_build.toPlainText()
+        sp = load_cfg().get("signpath") or {}
+        if any(sp.get(k) != val for k, val in keep.items()):
+            sp.update(keep); update_cfg(signpath=sp)
+
+    def copy_current(self):
+        e = self.out_tabs.currentWidget()
+        QGuiApplication.clipboard().setText(e.toPlainText())
+        self.m.toast(f"Αντιγράφηκε: {self.out_tabs.tabText(self.out_tabs.currentIndex())}")
+
+    def save_all(self):
+        d = QFileDialog.getExistingDirectory(self, "Φάκελος του repo (εκεί που είναι το .git)", load_cfg().get("sign_dir", ""))
+        if not d:
+            return
+        if not os.path.isdir(os.path.join(d, ".git")) and QMessageBox.question(
+                self, APP_NAME, "Αυτός ο φάκελος δεν φαίνεται να είναι repo (δεν έχει .git). Συνέχεια;") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        files = {os.path.join(".github", "workflows", "signpath-sign.yml"): self._texts["workflow"],
+                 "CODE_SIGNING_POLICY.md": self._texts["policy"],
+                 os.path.join("signpath", "artifact-configuration.xml"): self._texts["artcfg"]}
+        exist = [f for f in files if os.path.exists(os.path.join(d, f))]
+        if exist and QMessageBox.question(self, APP_NAME, "Υπάρχουν ήδη και θα αντικατασταθούν:\n" + "\n".join(exist)) \
+                != QMessageBox.StandardButton.Yes:
+            return
+        written = []
+        try:
+            for rel, text in files.items():
+                pth = os.path.join(d, rel); os.makedirs(os.path.dirname(pth), exist_ok=True)
+                with open(pth, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(text)
+                written.append(rel)
+            readme = next((os.path.join(d, n) for n in ("README.md", "readme.md", "Readme.md") if os.path.isfile(os.path.join(d, n))), None)
+            if readme:
+                txt = open(readme, encoding="utf-8", errors="replace").read()
+                if "code signing policy" not in txt.lower() and QMessageBox.question(
+                        self, APP_NAME, "Να προστεθεί η ενότητα «Code signing policy» στο τέλος του README.md;\n"
+                                        "(απαιτείται από το SignPath Foundation)") == QMessageBox.StandardButton.Yes:
+                    with open(readme, "a", encoding="utf-8", newline="\n") as f:
+                        f.write(("\n" if txt.endswith("\n") else "\n\n") + self._texts["readme"])
+                    written.append(os.path.basename(readme) + " (+ενότητα)")
+        except OSError as ex:
+            QMessageBox.critical(self, APP_NAME, f"Δεν αποθηκεύτηκε:\n{ex}"); return
+        log("SignPath αρχεία: " + ", ".join(written))
+        QMessageBox.information(self, APP_NAME, "Αποθηκεύτηκαν:\n• " + "\n• ".join(written) +
+                                "\n\nΕπόμενα βήματα:\n1. Αν δεν το έχετε κάνει, βάλτε τα στοιχεία του SignPath (Organization ID, "
+                                "Project slug) — μετά την έγκριση.\n2. GitHub → Settings → Secrets → SIGNPATH_API_TOKEN.\n"
+                                "3. Στο SignPath ανεβάστε το artifact-configuration.xml.\n4. Commit & push, και μετά δημοσιεύστε release.")
+        open_in_explorer(d)
+
+
 HELP = """<h2>Πώς δουλεύει</h2>
 <ol>
 <li><b>Πιστοποιητικό:</b> «Δημιουργία» μία φορά. Βγαίνουν 3 αρχεία: <b>.pfx</b> (ιδιωτικό — ΜΗΝ το δίνετε),
@@ -3469,11 +3905,13 @@ HELP = """<h2>Πώς δουλεύει</h2>
 <h3>Γρήγορα</h3>
 <ul>
 <li><b>Δεξί κλικ → Αποστολή προς:</b> στο βήμα ② πατήστε «📌 Δεξί κλικ → «Αποστολή προς»». Μετά υπογράφετε απευθείας από τον Explorer.</li>
-<li><b>Από build script:</b> <code>pythonw CertifiCat_v3.6.pyw --sign dist\\MyApp.exe</code></li>
+<li><b>Από build script:</b> <code>pythonw CertifiCat_v3.7.pyw --sign dist\\MyApp.exe</code></li>
 <li><b>Χρονοσήμανση:</b> αν ένας διακομιστής δεν απαντά, δοκιμάζονται αυτόματα οι άλλοι. Χωρίς internet διαλέξτε «Χωρίς χρονοσήμανση».</li>
 <li><b>Καταγραφή:</b> όλα τα μηνύματα των signtool/PowerShell, για όταν κάτι αποτύχει.</li>
 <li><b>Κλειδοθήκη (④):</b> λίστα με όλα τα πιστοποιητικά σας. Ο κωδικός φυλάσσεται μόνο αν το επιλέξετε,
 κρυπτογραφημένος, σε τοπική βάση (<code>%APPDATA%\\CertifiCat\\certificat.db</code>).</li>
+<li><b>⑤ Open Source (δωρεάν):</b> αν το έργο σας είναι ανοιχτού κώδικα στο GitHub, το SignPath Foundation
+υπογράφει δωρεάν με πιστοποιητικό που αναγνωρίζουν όλα τα Windows. Η σελίδα ελέγχει το repo σας και φτιάχνει όλα τα αρχεία.</li>
 <li><b>🐙 GitHub:</b> στο ① ή στην ④, το κουμπί «GitHub» δίνει το .pfx σε Base64 και τον κωδικό για τα
 <i>Secrets</i> του repo, μαζί με έτοιμο workflow ώστε το GitHub Actions να υπογράφει μόνο του σε κάθε build.</li>
 <li><b>Ενημερώσεις:</b> ελέγχονται από τις δημόσιες εκδόσεις στο GitHub. Η εφαρμογή δεν στέλνει κανένα προσωπικό στοιχείο.</li>
@@ -3503,7 +3941,8 @@ class MainWindow(QMainWindow):
         nm.setStyleSheet("color:white;font-size:14pt;font-weight:800;"); top.addWidget(nm); top.addStretch()
         sl.addLayout(top)
         self.btns = []
-        for i, t in enumerate(["①  Πιστοποιητικό", "②  Υπογραφή αρχείων", "③  Εγκατάσταση && διανομή", "④  Κλειδοθήκη"]):
+        for i, t in enumerate(["①  Πιστοποιητικό", "②  Υπογραφή αρχείων", "③  Εγκατάσταση && διανομή", "④  Κλειδοθήκη",
+                                  "⑤  Open Source (δωρεάν)"]):
             b = QPushButton(t); b.setObjectName("step"); b.setCheckable(True); b.clicked.connect(lambda _, k=i: self.go(k))
             sl.addWidget(b); self.btns.append(b)
         sl.addStretch()
@@ -3516,7 +3955,8 @@ class MainWindow(QMainWindow):
         h.addWidget(side)
         self.stack = QStackedWidget()
         self.p1 = CertPage(self); self.p2 = SignPage(self); self.p3 = InstallPage(self); self.p4 = VaultPage(self)
-        for p in (self.p1, self.p2, self.p3, self.p4):
+        self.p5 = OpenSourcePage(self)
+        for p in (self.p1, self.p2, self.p3, self.p4, self.p5):
             self.stack.addWidget(p)
         h.addWidget(self.stack, 1)
         self.statusBar().setStyleSheet("background:white;color:#5C6B80;")
