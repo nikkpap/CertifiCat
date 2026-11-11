@@ -80,10 +80,11 @@ built-in `GITHUB_TOKEN`. No secrets are stored in the repo.
 
 1. In `CertifiCat_vX.Y.pyw` set `APP_VERSION = "X.Y.Z"` and rename the file to the new version.
 2. Optional: add release notes in `release-notes/vX.Y.Z.md`.
-3. Push a tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+3. Push/merge to `main`.
 
-The workflow checks that the tag matches `APP_VERSION`, computes `*.sha256` and publishes the release with
-`CertifiCat_vX.Y.pyw` + `CertifiCat_vX.Y.pyw.sha256`. Installed copies update themselves (OTA) on their next start.
+If there is no release `vX.Y.Z` yet, the workflow creates the tag and publishes the release with
+`CertifiCat_vX.Y.pyw` + `CertifiCat_vX.Y.pyw.sha256` (it can also be started by hand from the *Actions* tab).
+Installed copies update themselves (OTA) on their next start.
 
 ---
 
