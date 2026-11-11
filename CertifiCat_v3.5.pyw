@@ -1806,7 +1806,43 @@ QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #2
 QPlainTextEdit#log { background: #10141C; color: #D8E1EE; border-radius: 8px; padding: 6px;
     font-family: Consolas, 'DejaVu Sans Mono', monospace; font-size: 9pt; }
 QToolTip { background: #362044; color: white; border: none; padding: 6px; }
+QDialog, QMessageBox { background: #F4F6FA; }
+QLabel, QCheckBox, QRadioButton { color: #1F2A3D; }
+QCheckBox:disabled, QLabel:disabled { color: #9AA5B8; }
+QTextEdit, QComboBox QAbstractItemView, QMenu { background: white; color: #1F2A3D; }
+QMenu::item:selected { background: #D7E6FB; }
+QLineEdit, QComboBox, QSpinBox { color: #1F2A3D; }
 """
+
+
+def apply_light_theme(app):
+    """Η εφαρμογή είναι σχεδιασμένη σε ανοιχτά χρώματα. Αν τα Windows είναι σε σκούρο θέμα (dark mode),
+    το Qt δίνει λευκά γράμματα → εξαφανίζονται οι ετικέτες. Κλειδώνουμε ανοιχτό θέμα σε όλες τις εκδόσεις Qt."""
+    try:
+        app.styleHints().setColorScheme(Qt.ColorScheme.Light)        # Qt 6.8+
+    except Exception:
+        pass
+    from PyQt6.QtGui import QPalette
+    pal = QPalette()
+    R_ = QPalette.ColorRole
+    base = {R_.Window: "#F4F6FA", R_.WindowText: "#1F2A3D", R_.Base: "#FFFFFF", R_.AlternateBase: "#F4F6FA",
+            R_.Text: "#1F2A3D", R_.Button: "#FFFFFF", R_.ButtonText: "#1F2A3D", R_.BrightText: "#FFFFFF",
+            R_.Highlight: "#2D6CDF", R_.HighlightedText: "#FFFFFF", R_.ToolTipBase: "#362044",
+            R_.ToolTipText: "#FFFFFF", R_.PlaceholderText: "#8A94A6", R_.Link: "#2D6CDF", R_.LinkVisited: "#6B3FA0",
+            R_.Light: "#FFFFFF", R_.Midlight: "#EEF1F6", R_.Mid: "#CBD3E1", R_.Dark: "#9AA5B8", R_.Shadow: "#5C6B80"}
+    for role, col in base.items():
+        pal.setColor(role, QColor(col))
+    for role in (R_.WindowText, R_.Text, R_.ButtonText):
+        pal.setColor(QPalette.ColorGroup.Disabled, role, QColor("#9AA5B8"))
+    app.setPalette(pal)
+
+
+def fit_to_screen(w, want_w=1180, want_h=800):
+    """Το παράθυρο χωράει πάντα στην οθόνη (και σε laptop με κλίμακα 125–150%) και ανοίγει στο κέντρο."""
+    scr = (w.screen() or QApplication.primaryScreen()).availableGeometry()
+    ww, hh = min(want_w, scr.width() - 20), min(want_h, scr.height() - 40)
+    w.resize(ww, hh)
+    w.move(scr.x() + (scr.width() - ww) // 2, scr.y() + max(0, (scr.height() - hh) // 2 - 10))
 
 
 def title_block(t, s):
@@ -2087,8 +2123,9 @@ class CertPage(QWidget):
         f.addRow("Ισχύς:", self.years); f.addRow("Κωδικός .pfx:", pr); f.addRow("", self.compat)
         self.mk = btn("✨ Δημιουργία πιστοποιητικού…", self.create, "orange")
         f.addRow("", self.mk)
-        note = QLabel("Μόνο για υπογραφή προγραμμάτων (δεν μπορεί να εκδώσει άλλα πιστοποιητικά ή να επηρεάσει ιστοσελίδες).")
-        note.setWordWrap(True); note.setObjectName("subtitle"); f.addRow(note)
+        note = QLabel("🔒 Μόνο για υπογραφή κώδικα")
+        note.setToolTip("Δεν μπορεί να εκδώσει άλλα πιστοποιητικά ούτε να επηρεάσει ιστοσελίδες/HTTPS.")
+        note.setObjectName("subtitle"); f.addRow("", note)
         row.addWidget(g, 1)
         # ---- υπάρχον ----
         g2 = QGroupBox("📂 Υπάρχον πιστοποιητικό"); f2 = QFormLayout(g2)
@@ -2096,9 +2133,9 @@ class CertPage(QWidget):
         br = QHBoxLayout(); br.addWidget(self.path); br.addWidget(btn("…", self.browse, "secondary", "Αναζήτηση .pfx", 46))
         self.pw2 = QLineEdit(); self.pw2.setEchoMode(QLineEdit.EchoMode.Password); self.pw2.setPlaceholderText("κωδικός του .pfx")
         self.pw2.returnPressed.connect(self.open_existing)
-        self.remember = QCheckBox("Αποθήκευση κωδικού στην Κλειδοθήκη (μόνο σε αυτόν τον υπολογιστή)")
+        self.remember = QCheckBox("Αποθήκευση κωδικού στην Κλειδοθήκη")
         self.remember.setEnabled(IS_WIN)
-        self.remember.setToolTip("Κρυπτογραφημένα με τον λογαριασμό σας στα Windows (DPAPI) — μόνο εσείς τον ξεκλειδώνετε.")
+        self.remember.setToolTip("Μόνο σε αυτόν τον υπολογιστή, κρυπτογραφημένα με τον λογαριασμό σας στα Windows (DPAPI).")
         op = btn("🔓 Άνοιγμα", self.open_existing)
         f2.addRow("Αρχείο .pfx:", br); f2.addRow("Κωδικός:", self.pw2); f2.addRow("", self.remember); f2.addRow("", op)
         self.info = QLabel("Κανένα πιστοποιητικό ανοιχτό."); self.info.setWordWrap(True)
@@ -3328,7 +3365,7 @@ class MainWindow(QMainWindow):
         self.log_dlg = None
         self.restarting = False
         self.setWindowTitle(f"{APP_NAME}  v{APP_VERSION}")
-        self.setWindowIcon(QIcon(logo_pixmap(256))); self.resize(1180, 800); self.setMinimumSize(980, 680)
+        self.setWindowIcon(QIcon(logo_pixmap(256))); self.resize(1180, 800); self.setMinimumSize(900, 600)
         root = QWidget(); self.setCentralWidget(root)
         h = QHBoxLayout(root); h.setContentsMargins(0, 0, 0, 0); h.setSpacing(0)
         side = QWidget(); side.setObjectName("sidebar"); side.setFixedWidth(265)
@@ -3498,7 +3535,7 @@ def main():
             pass
     files, autosign = parse_args(sys.argv[1:])
     log(f"{APP_NAME} {APP_VERSION} — εκκίνηση" + (f" με {len(files)} αρχεία" if files else ""))
-    app = QApplication(sys.argv); app.setStyle("Fusion"); app.setStyleSheet(STYLE)
+    app = QApplication(sys.argv); app.setStyle("Fusion"); apply_light_theme(app); app.setStyleSheet(STYLE)
     app.setWindowIcon(QIcon(logo_pixmap(256)))
     sp = Splash()
     scr = app.primaryScreen().availableGeometry()
@@ -3508,7 +3545,7 @@ def main():
     def start(res):
         if "w" in hold:
             return
-        hold["w"] = MainWindow(res, files, autosign); hold["w"].show(); sp.close()
+        hold["w"] = MainWindow(res, files, autosign); fit_to_screen(hold["w"]); hold["w"].show(); sp.close()
     sp.done.connect(start)
     sys.exit(app.exec())
 
