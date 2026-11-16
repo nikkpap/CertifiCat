@@ -10,7 +10,7 @@ and give colleagues a double-click installer, so Windows shows **your name** ins
 
 > Η εφαρμογή είναι στα ελληνικά. · The user interface is in Greek.
 
-![Sign](screenshots/v3.5/2_sign.png)
+![Sign](screenshots/v3.7/2_sign.png)
 
 ---
 
@@ -37,9 +37,18 @@ Get the latest **`CertifiCat_v*.pyw`** from **[Releases](https://github.com/nikk
 | ⑤ | **Open Source** | Free, publicly trusted signing through SignPath Foundation, for OSI-licensed projects built on GitHub Actions. |
 
 <p>
-<img src="screenshots/v3.5/1_certificate.png" width="49%"> <img src="screenshots/v3.5/3_install.png" width="49%">
-<img src="screenshots/v3.5/4_vault.png" width="49%"> <img src="screenshots/v3.5/6_update.png" width="49%">
+<img src="screenshots/v3.7/1_certificate.png" width="49%"> <img src="screenshots/v3.7/3_install.png" width="49%">
+<img src="screenshots/v3.7/4_vault.png" width="49%"> <img src="screenshots/v3.7/10_update.png" width="49%">
 </p>
+
+### ⑤ Free signing for open source (SignPath Foundation)
+
+<p>
+<img src="screenshots/v3.7/5_opensource_options.png" width="49%"> <img src="screenshots/v3.7/6_opensource_check.png" width="49%">
+<img src="screenshots/v3.7/7_opensource_files.png" width="49%"> <img src="screenshots/v3.7/8_github.png" width="49%">
+</p>
+
+<p align="center"><img src="screenshots/v3.7/0_splash.png" width="45%"> <img src="screenshots/v3.7/9_about.png" width="30%"></p>
 
 ---
 
@@ -95,7 +104,7 @@ Installed copies update themselves (OTA) on their next start.
 ```
 CertifiCat_v3.6.pyw     ← the app (single file)
 tools/                  ← signtool.exe & helpers (optional, auto-detected)
-screenshots/v3.5/       ← screenshots
+screenshots/v3.7/       ← screenshots
 legacy/                 ← older Tkinter version (v2.5)
 ```
 
