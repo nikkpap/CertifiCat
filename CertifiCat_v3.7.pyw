@@ -12,12 +12,12 @@ CertifiCat — Self-signed πιστοποιητικά υπογραφής κώδ�
     CertifiCat_v3.7.pyw  --sign  αρχείο1.exe ...     → τα υπογράφει αμέσως (με το τελευταίο πιστοποιητικό)
 """
 APP_NAME = "CertifiCat"
-APP_VERSION = "3.7.0"
+APP_VERSION = "3.7.1"
 APP_AUTHOR = "ALU DEV TEAM"
 
 # ---- Στοιχεία δημιουργού (εμφανίζονται στο «Σχετικά») ----
 AUTHOR_NAME = "Νικόλαος Κ. Παρίδης"
-AUTHOR_NAME_EN = "Nikolaos K. Paridis"
+AUTHOR_NAME_EN = "Nikolaos K. Paridis (aka nikkpap)"
 AUTHOR_TITLE = "Πολιτικός Μηχανικός · ALU DEV TEAM"
 AUTHOR_EMAIL = "nikkpap@gmail.com"
 AUTHOR_GITHUB = "https://github.com/nikkpap"
@@ -3951,7 +3951,8 @@ class MainWindow(QMainWindow):
             b = QPushButton(t); b.setObjectName("step"); b.clicked.connect(fn); sl.addWidget(b)
             if t.startswith("⟳"):
                 self.b_update = b
-        cr = QLabel(f"  {AUTHOR_NAME_EN} · {APP_AUTHOR}"); cr.setStyleSheet("color:#9C86B3;font-size:8.5pt;padding:8px 16px;"); sl.addWidget(cr)
+        cr = QLabel(f"{AUTHOR_NAME_EN}<br>{APP_AUTHOR}"); cr.setTextFormat(Qt.TextFormat.RichText)
+        cr.setStyleSheet("color:#9C86B3;font-size:8.5pt;padding:8px 16px;"); sl.addWidget(cr)
         h.addWidget(side)
         self.stack = QStackedWidget()
         self.p1 = CertPage(self); self.p2 = SignPage(self); self.p3 = InstallPage(self); self.p4 = VaultPage(self)
@@ -4045,7 +4046,7 @@ class MainWindow(QMainWindow):
             (f"✉ <a href='mailto:{AUTHOR_EMAIL}'>{AUTHOR_EMAIL}</a>", ""),
             (f"<a href='{AUTHOR_GITHUB}'>{AUTHOR_GITHUB.replace('https://', '')}</a> · "
              f"<a href='https://github.com/{UPDATE_REPO}'>κώδικας & εκδόσεις</a>", ""),
-            (f"© {datetime.now().year} {AUTHOR_NAME_EN} · Άδεια GPL-3.0 · Δωρεάν λογισμικό",
+            (f"© {datetime.now().year} {AUTHOR_NAME_EN}<br>Άδεια GPL-3.0 · Δωρεάν λογισμικό",
              "color:#9AA5B8;font-size:8.5pt;margin-top:10px;"),
         ]
         for txt, css in rows:

@@ -112,7 +112,7 @@ legacy/                 ← older Tkinter version (v2.5)
 
 ## 👤 Author
 
-**Νικόλαος Κ. Παρίδης · Nikolaos K. Paridis**, Civil Engineer · ALU DEV TEAM
+**Νικόλαος Κ. Παρίδης · Nikolaos K. Paridis (aka nikkpap)**, Civil Engineer · ALU DEV TEAM
 ✉ [nikkpap@gmail.com](mailto:nikkpap@gmail.com) · [github.com/nikkpap](https://github.com/nikkpap)
 
 Licensed under **GPL-3.0**, see [LICENSE](LICENSE).
